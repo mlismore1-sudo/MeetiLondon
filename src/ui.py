@@ -7,6 +7,7 @@ from streamlit_folium import st_folium
 from src.db import (
     CATEGORIES,
     CATEGORY_EMOJIS,
+    CATEGORY_GROUPS,
     COSTS,
     COST_EMOJI,
     delete_place,
@@ -44,6 +45,14 @@ def get_cost_emojis(place):
         cost_index = 1
 
     return COST_EMOJI * (cost_index + 1)
+
+
+def get_cover_photo(visits):
+    for visit in visits:
+        if visit.get("photos"):
+            return visit["photos"][0]
+
+    return None
 
 
 def make_directions_links(place):
@@ -124,10 +133,14 @@ def show_place_map(places, visited_place_ids=None, centre=None, zoom=11):
     st_folium(fmap, use_container_width=True, height=550)
 
 
-def show_place_card(place, visits):
+def show_place_card(place, visits, show_delete=True):
     with st.container(border=True):
-        is_visited = len(visits) > 0
+        cover_photo = get_cover_photo(visits)
 
+        if cover_photo:
+            st.image(cover_photo, use_container_width=True)
+
+        is_visited = len(visits) > 0
         emojis = get_place_emojis(place)
         cost_emojis = get_cost_emojis(place)
 
@@ -176,29 +189,76 @@ def show_place_card(place, visits):
                     if visit.get("diary"):
                         st.write(visit["diary"])
 
-                    for url in visit.get("photos", []):
-                        st.image(url, use_container_width=True)
+                    if visit.get("photos"):
+                        columns = st.columns(3)
+
+                        for index, url in enumerate(visit["photos"]):
+                            with columns[index % 3]:
+                                st.image(url, use_container_width=True)
 
                     st.divider()
 
-        with st.expander("⚠️ Delete this place"):
-            st.warning(
-                "This will permanently delete the place and all of its visit "
-                "diary entries. This cannot be undone."
+        if show_delete:
+            with st.expander("⚠️ Delete this place"):
+                st.warning(
+                    "This will permanently delete the place and all of its visit "
+                    "diary entries. This cannot be undone."
+                )
+
+                confirm_delete = st.checkbox(
+                    f"Yes, permanently delete {place['name']}",
+                    key=f"confirm_delete_{place['id']}",
+                )
+
+                if st.button(
+                    "Delete place",
+                    key=f"delete_place_{place['id']}",
+                    disabled=not confirm_delete,
+                    type="primary",
+                ):
+                    delete_place(place["id"])
+                    st.cache_data.clear()
+                    st.success(f"Deleted {place['name']}.")
+                    st.rerun()
+
+
+def show_outing_card(outing, visits):
+    with st.container(border=True):
+        st.subheader(f"{outing['title']} 🗓️")
+        st.caption(f"{outing['outing_date']} • {len(visits)} places visited")
+
+        if outing.get("notes"):
+            st.write(outing["notes"])
+
+        all_photos = []
+
+        for visit in visits:
+            place = visit.get("places") or {}
+            place_name = place.get("name", "Unknown place")
+            emojis = " ".join(
+                CATEGORY_EMOJIS.get(category, "📍")
+                for category in place.get("categories", [])
             )
 
-            confirm_delete = st.checkbox(
-                f"Yes, permanently delete {place['name']}",
-                key=f"confirm_delete_{place['id']}",
+            st.markdown(
+                f"### {place_name} {emojis}"
             )
 
-            if st.button(
-                "Delete place",
-                key=f"delete_place_{place['id']}",
-                disabled=not confirm_delete,
-                type="primary",
-            ):
-                delete_place(place["id"])
-                st.cache_data.clear()
-                st.success(f"Deleted {place['name']}.")
-                st.rerun()
+            st.caption(
+                f"{visit['visit_date']} • "
+                f"{'⭐' * (visit['rating'] or 0)}"
+            )
+
+            if visit.get("diary"):
+                st.write(visit["diary"])
+
+            all_photos.extend(visit.get("photos", []))
+
+        if all_photos:
+            st.subheader("📸 Photos")
+
+            columns = st.columns(3)
+
+            for index, url in enumerate(all_photos):
+                with columns[index % 3]:
+                    st.image(url, use_container_width=True)
