@@ -18,6 +18,7 @@ CATEGORIES = [
     "Park",
     "Market",
     "Experience",
+    "Dog walk",
 ]
 
 CATEGORY_EMOJIS = {
@@ -32,6 +33,7 @@ CATEGORY_EMOJIS = {
     "Wine Bar": "🍷",
     "Coffee shop": "☕️",
     "Park": "🌳",
+    "Dog walk": "🐕",
     "Market": "🍲",
     "Experience": "🪂",
 }
@@ -57,6 +59,7 @@ CATEGORY_GROUPS = {
     "Something to do": [
         "Park",
         "Experience",
+        "Dog walk",
     ],
 }
 
