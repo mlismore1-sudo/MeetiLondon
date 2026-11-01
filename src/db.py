@@ -121,11 +121,25 @@ def get_outings():
     return response.data
 
 
+@st.cache_data(ttl=300)
+def get_all_visits():
+    response = (
+        get_supabase()
+        .table("visits")
+        .select(
+            "*, places(name, categories, cost, postcode, latitude, longitude)"
+        )
+        .order("visit_date", desc=True)
+        .execute()
+    )
+    return response.data
+
+
 def get_visits_for_outing(outing_id):
     response = (
         get_supabase()
         .table("visits")
-        .select("*, places(name, categories, cost, postcode)")
+        .select("*, places(name, categories, cost, postcode, latitude, longitude)")
         .eq("outing_id", outing_id)
         .order("created_at", desc=False)
         .execute()
