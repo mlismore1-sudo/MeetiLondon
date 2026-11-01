@@ -78,6 +78,56 @@ def make_directions_links(place):
     )
 
 
+@st.dialog("Place details", width="large")
+def place_details_dialog(place, visits):
+    cover_photo = get_cover_photo(visits)
+
+    if cover_photo:
+        st.image(cover_photo, use_container_width=True)
+
+    emojis = get_place_emojis(place)
+    cost_emojis = get_cost_emojis(place)
+
+    st.subheader(f"{place['name']} {emojis}")
+    st.caption(f"{cost_emojis} • {place['postcode']}")
+
+    st.markdown(
+        " ".join(
+            f"`{category}`"
+            for category in place["categories"]
+        )
+    )
+
+    if place.get("notes"):
+        st.write(place["notes"])
+
+    st.markdown(make_directions_links(place), unsafe_allow_html=True)
+
+    st.divider()
+    st.subheader("Visit history")
+
+    if not visits:
+        st.info("No visits recorded yet.")
+    else:
+        for visit in visits:
+            st.markdown(
+                f"**{visit['visit_date']}** — "
+                f"{'⭐' * (visit['rating'] or 0)}"
+            )
+
+            if visit.get("diary"):
+                st.write(visit["diary"])
+
+            if visit.get("photos"):
+                columns = st.columns(3)
+
+                for index, url in enumerate(visit["photos"]):
+                    with columns[index % 3]:
+                        st.image(url, use_container_width=True)
+
+            st.divider()
+
+
 def show_place_map(places, visited_place_ids=None, centre=None, zoom=11):
     visited_place_ids = visited_place_ids or set()
 
@@ -133,6 +183,48 @@ def show_place_map(places, visited_place_ids=None, centre=None, zoom=11):
     st_folium(fmap, use_container_width=True, height=550)
 
 
+def show_route_map(places):
+    places = [
+        place
+        for place in places
+        if place.get("latitude") is not None
+        and place.get("longitude") is not None
+    ]
+
+    if not places:
+        st.info("Add at least one stop to see the route map.")
+        return
+
+    fmap = folium.Map(
+        location=[places[0]["latitude"], places[0]["longitude"]],
+        zoom_start=14,
+        tiles="OpenStreetMap",
+    )
+
+    route_points = []
+
+    for index, place in enumerate(places, start=1):
+        location = [place["latitude"], place["longitude"]]
+        route_points.append(location)
+
+        folium.Marker(
+            location=location,
+            tooltip=f"{index}. {place['name']}",
+            popup=f"<b>{index}. {place['name']}</b><br>{place['categories']}",
+            icon=folium.Icon(color="blue", icon="info-sign"),
+        ).add_to(fmap)
+
+    if len(route_points) > 1:
+        folium.PolyLine(
+            route_points,
+            color="#ff4b4b",
+            weight=4,
+            opacity=0.8,
+        ).add_to(fmap)
+
+    st_folium(fmap, use_container_width=True, height=450)
+
+
 def show_place_card(place, visits, show_delete=True):
     with st.container(border=True):
         cover_photo = get_cover_photo(visits)
@@ -176,27 +268,23 @@ def show_place_card(place, visits, show_delete=True):
             with col2:
                 st.metric("Average rating", f"{average}/5")
 
-        with st.expander("Visit history and photos"):
-            if not visits:
-                st.info("No visits recorded yet.")
-            else:
-                for visit in visits:
-                    st.markdown(
-                        f"**{visit['visit_date']}** — "
-                        f"{'⭐' * (visit['rating'] or 0)}"
-                    )
+        button_columns = st.columns(2)
 
-                    if visit.get("diary"):
-                        st.write(visit["diary"])
+        with button_columns[0]:
+            if st.button(
+                "View details",
+                key=f"view_details_{place['id']}",
+                use_container_width=True,
+            ):
+                st.session_state["selected_place_id"] = place["id"]
 
-                    if visit.get("photos"):
-                        columns = st.columns(3)
-
-                        for index, url in enumerate(visit["photos"]):
-                            with columns[index % 3]:
-                                st.image(url, use_container_width=True)
-
-                    st.divider()
+        with button_columns[1]:
+            if st.button(
+                "View on map",
+                key=f"view_on_map_{place['id']}",
+                use_container_width=True,
+            ):
+                st.session_state["selected_map_place_id"] = place["id"]
 
         if show_delete:
             with st.expander("⚠️ Delete this place"):
@@ -224,6 +312,11 @@ def show_place_card(place, visits, show_delete=True):
 
 def show_outing_card(outing, visits):
     with st.container(border=True):
+        cover_photo = get_cover_photo(visits)
+
+        if cover_photo:
+            st.image(cover_photo, use_container_width=True)
+
         st.subheader(f"{outing['title']} 🗓️")
         st.caption(f"{outing['outing_date']} • {len(visits)} places visited")
 
@@ -231,6 +324,7 @@ def show_outing_card(outing, visits):
             st.write(outing["notes"])
 
         all_photos = []
+        route_places = []
 
         for visit in visits:
             place = visit.get("places") or {}
@@ -240,10 +334,7 @@ def show_outing_card(outing, visits):
                 for category in place.get("categories", [])
             )
 
-            st.markdown(
-                f"### {place_name} {emojis}"
-            )
-
+            st.markdown(f"### {place_name} {emojis}")
             st.caption(
                 f"{visit['visit_date']} • "
                 f"{'⭐' * (visit['rating'] or 0)}"
@@ -254,6 +345,9 @@ def show_outing_card(outing, visits):
 
             all_photos.extend(visit.get("photos", []))
 
+            if place.get("latitude") and place.get("longitude"):
+                route_places.append(place)
+
         if all_photos:
             st.subheader("📸 Photos")
 
@@ -262,3 +356,7 @@ def show_outing_card(outing, visits):
             for index, url in enumerate(all_photos):
                 with columns[index % 3]:
                     st.image(url, use_container_width=True)
+
+        if len(route_places) > 1:
+            with st.expander("🗺️ View this outing on a map"):
+                show_route_map(route_places)
