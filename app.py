@@ -82,18 +82,22 @@ with tab_add:
                 if coordinates is None:
                     st.error("Could not find that postcode.")
                 else:
-                    add_place(
-                        name=name,
-                        categories=categories,
-                        postcode=postcode,
-                        latitude=coordinates[0],
-                        longitude=coordinates[1],
-                        cost=cost,
-                        notes=notes,
-                    )
+                    try:
+                        add_place(
+                            name=name,
+                            categories=categories,
+                            postcode=postcode,
+                            latitude=coordinates[0],
+                            longitude=coordinates[1],
+                            cost=cost,
+                            notes=notes,
+                        )
 
-                    st.success(f"Saved {name}.")
-                    st.rerun()
+                        st.cache_data.clear()
+                        st.success(f"Saved {name}.")
+                        st.rerun()
+                    except Exception as error:
+                        st.error(f"Could not save place: {error}")
 
 with tab_map:
     st.subheader("Find somewhere nearby")
@@ -312,5 +316,6 @@ with tab_diary:
                     photo_urls=photo_urls,
                 )
 
+                st.cache_data.clear()
                 st.success("Visit saved.")
                 st.rerun()
