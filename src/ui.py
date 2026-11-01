@@ -7,21 +7,19 @@ import streamlit as st
 import streamlit.components.v1 as components
 
 from src.db import CATEGORIES, CATEGORY_EMOJIS, COSTS, COST_EMOJI, delete_place
+from src.place_editor import show_venue_information
 
 
 def category_multiselect(default=None):
-    return st.multiselect("Categories", CATEGORIES, default=default or [],
-                          help="Choose as many as apply.")
+    return st.multiselect("Categories", CATEGORIES, default=default or [], help="Choose as many as apply.")
 
 
 def cost_select(default="£"):
-    return st.selectbox("Cost rating", COSTS,
-                        index=COSTS.index(default) if default in COSTS else 0)
+    return st.selectbox("Cost rating", COSTS, index=COSTS.index(default) if default in COSTS else 0)
 
 
 def get_place_emojis(place):
-    return " ".join(CATEGORY_EMOJIS.get(c, "📍")
-                    for c in (place.get("categories") or []))
+    return " ".join(CATEGORY_EMOJIS.get(c, "📍") for c in (place.get("categories") or []))
 
 
 def get_cost_emojis(place):
@@ -79,8 +77,7 @@ def show_place_map(places, visited_place_ids=None, centre=None, zoom=11):
             pass
     location = centre_coords or (get_coordinates(valid[0]) if valid else [51.5074, -0.1278])
     height = 550
-    fmap = folium.Map(location=location, zoom_start=zoom, tiles="OpenStreetMap",
-                      width="100%", height=height, control_scale=True)
+    fmap = folium.Map(location=location, zoom_start=zoom, tiles="OpenStreetMap", width="100%", height=height, control_scale=True)
     for place in valid:
         seen = place.get("id") in visited
         name = escape(str(place.get("name", "Unnamed place")))
@@ -95,8 +92,7 @@ def show_place_map(places, visited_place_ids=None, centre=None, zoom=11):
         )
         folium.Marker(get_coordinates(place), popup=folium.Popup(popup, max_width=300),
                       tooltip=f"{name} {get_place_emojis(place)}",
-                      icon=folium.Icon(color="green" if seen else "blue",
-                                       icon="ok" if seen else "info-sign")).add_to(fmap)
+                      icon=folium.Icon(color="green" if seen else "blue", icon="ok" if seen else "info-sign")).add_to(fmap)
     if centre_coords is None and len(valid) > 1:
         fmap.fit_bounds([get_coordinates(p) for p in valid], padding=(35, 35), max_zoom=15)
     render_map(fmap, height)
@@ -108,8 +104,7 @@ def show_route_map(places):
         st.info("No valid map coordinates are available for these stops.")
         return
     height = 450
-    fmap = folium.Map(location=get_coordinates(valid[0]), zoom_start=14,
-                      tiles="OpenStreetMap", width="100%", height=height, control_scale=True)
+    fmap = folium.Map(location=get_coordinates(valid[0]), zoom_start=14, tiles="OpenStreetMap", width="100%", height=height, control_scale=True)
     points = []
     for i, place in enumerate(valid, 1):
         coords = get_coordinates(place)
@@ -159,10 +154,10 @@ def place_details_dialog(place, visits):
     if place.get("notes"):
         st.write(place["notes"])
     st.markdown(make_directions_links(place), unsafe_allow_html=True)
+    show_venue_information(place)
     if get_coordinates(place) is not None:
         with st.expander("🗺️ Location"):
-            show_place_map([place], {place["id"]} if visits else set(),
-                           centre=get_coordinates(place), zoom=15)
+            show_place_map([place], {place["id"]} if visits else set(), centre=get_coordinates(place), zoom=15)
     st.divider()
     st.subheader("Visit history")
     if not visits:
@@ -203,8 +198,7 @@ def show_place_card(place, visits, show_delete=True, key_prefix=""):
         if st.button("View details ↗", key=f"{prefix}_details", use_container_width=True):
             place_details_dialog(place, visits)
         if st.checkbox("Show location", key=f"{prefix}_location"):
-            show_place_map([place], {place["id"]} if visits else set(),
-                           centre=get_coordinates(place), zoom=15)
+            show_place_map([place], {place["id"]} if visits else set(), centre=get_coordinates(place), zoom=15)
         if show_delete:
             delete_controls(place, prefix)
 
