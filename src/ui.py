@@ -4,7 +4,7 @@ import folium
 import streamlit as st
 from streamlit_folium import st_folium
 
-from src.db import CATEGORIES, COSTS
+from src.db import CATEGORIES, COSTS, delete_place
 
 
 def category_multiselect(default=None):
@@ -50,7 +50,6 @@ def make_directions_links(place):
 def show_place_map(places, visited_place_ids=None, centre=None, zoom=11):
     visited_place_ids = visited_place_ids or set()
 
-    # Ignore any places that do not have map coordinates
     places = [
         place
         for place in places
@@ -146,3 +145,25 @@ def show_place_card(place, visits):
                         st.image(url, use_container_width=True)
 
                     st.divider()
+
+        with st.expander("⚠️ Delete this place"):
+            st.warning(
+                "This will permanently delete the place and all of its visit "
+                "diary entries. This cannot be undone."
+            )
+
+            confirm_delete = st.checkbox(
+                f"Yes, permanently delete {place['name']}",
+                key=f"confirm_delete_{place['id']}",
+            )
+
+            if st.button(
+                "Delete place",
+                key=f"delete_place_{place['id']}",
+                disabled=not confirm_delete,
+                type="primary",
+            ):
+                delete_place(place["id"])
+                st.cache_data.clear()
+                st.success(f"Deleted {place['name']}.")
+                st.rerun()
