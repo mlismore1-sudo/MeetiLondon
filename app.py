@@ -7,6 +7,7 @@ from src.db import (
     add_place,
     add_visit,
     create_outing,
+    get_all_visits,
     get_outings,
     get_place,
     get_places,
@@ -18,9 +19,11 @@ from src.geo import find_nearby_places, geocode_postcode
 from src.ui import (
     category_multiselect,
     cost_select,
+    place_details_dialog,
     show_outing_card,
     show_place_card,
     show_place_map,
+    show_route_map,
 )
 
 st.set_page_config(
@@ -50,8 +53,9 @@ st.caption(
     "Save places to try, plan adventures by area, and keep a shared photo diary."
 )
 
-tab_add, tab_map, tab_list, tab_diary, tab_plan, tab_memories = st.tabs(
+tab_home, tab_add, tab_map, tab_list, tab_diary, tab_plan, tab_memories = st.tabs(
     [
+        "🏠 Home",
         "➕ Add place",
         "🗺️ Map & nearby",
         "📋 All places",
@@ -62,6 +66,100 @@ tab_add, tab_map, tab_list, tab_diary, tab_plan, tab_memories = st.tabs(
 )
 
 places = get_places()
+all_visits = get_all_visits()
+outings = get_outings()
+
+visited_place_ids = {
+    visit["place_id"]
+    for visit in all_visits
+}
+
+unvisited_places = [
+    place for place in places if place["id"] not in visited_place_ids
+]
+
+with tab_home:
+    st.subheader("Welcome back")
+
+    total_photos = sum(
+        len(visit.get("photos", []))
+        for visit in all_visits
+    )
+
+    average_rating = None
+
+    rated_visits = [
+        visit for visit in all_visits if visit.get("rating")
+    ]
+
+    if rated_visits:
+        average_rating = round(
+            sum(visit["rating"] for visit in rated_visits)
+            / len(rated_visits),
+            1,
+        )
+
+    col1, col2, col3, col4 = st.columns(4)
+
+    with col1:
+        st.metric("Places saved", len(places))
+
+    with col2:
+        st.metric("Places visited", len(visited_place_ids))
+
+    with col3:
+        st.metric("Photos", total_photos)
+
+    with col4:
+        st.metric(
+            "Average rating",
+            f"{average_rating}/5" if average_rating else "—",
+        )
+
+    st.divider()
+
+    if unvisited_places:
+        st.subheader("✨ Next adventure idea")
+
+        try:
+            home_postcode = st.secrets.get("HOME_POSTCODE", "")
+        except Exception:
+            home_postcode = ""
+
+        if home_postcode:
+            nearby_unvisited = find_nearby_places(
+                unvisited_places,
+                home_postcode,
+                15,
+            )
+
+            if nearby_unvisited:
+                next_place = nearby_unvisited[0]
+            else:
+                next_place = unvisited_places[0]
+        else:
+            next_place = unvisited_places[0]
+
+        show_place_card(
+            next_place,
+            get_visits_for_place(next_place["id"]),
+            show_delete=False,
+        )
+    else:
+        st.info("You have visited every saved place. Time to add more!")
+
+    st.divider()
+
+    st.subheader("📸 Recent memories")
+
+    if outings:
+        recent_outings = outings[:2]
+
+        for outing in recent_outings:
+            outing_visits = get_visits_for_outing(outing["id"])
+            show_outing_card(outing, outing_visits)
+    else:
+        st.info("No outings yet. Create one in the Memories tab.")
 
 with tab_add:
     st.subheader("Add a place you want to try")
@@ -116,12 +214,6 @@ with tab_map:
             for category in place["categories"]
         }
     )
-
-    visited_place_ids = {
-        place["id"]
-        for place in places
-        if get_visits_for_place(place["id"])
-    }
 
     col_filter1, col_filter2 = st.columns(2)
 
@@ -284,6 +376,47 @@ with tab_diary:
             place for place in places if place["name"] == chosen_name
         )
 
+        with st.form("create_outing_form", border=True):
+            st.markdown("**Create a new outing**")
+
+            new_outing_title = st.text_input(
+                "Outing title",
+                placeholder="e.g. Saturday in Soho",
+            )
+
+            new_outing_date = st.date_input(
+                "Outing date",
+                value=date.today(),
+            )
+
+            new_outing_notes = st.text_area(
+                "Outing notes",
+                placeholder="Optional: what was the plan?",
+            )
+
+            create_outing_clicked = st.form_submit_button(
+                "Create outing"
+            )
+
+            if create_outing_clicked:
+                if not new_outing_title:
+                    st.error("Please add an outing title.")
+                else:
+                    try:
+                        create_outing(
+                            title=new_outing_title,
+                            outing_date=new_outing_date,
+                            notes=new_outing_notes,
+                        )
+
+                        st.cache_data.clear()
+                        st.success("Outing created.")
+                        st.rerun()
+                    except Exception as error:
+                        st.error(f"Could not create outing: {error}")
+
+        st.divider()
+
         outings = get_outings()
         outing_options = ["No outing"] + [
             f"{outing['title']} — {outing['outing_date']}"
@@ -314,7 +447,7 @@ with tab_diary:
             )
 
             selected_outing = st.selectbox(
-                "Was this part of an existing outing?",
+                "Was this part of an outing?",
                 options=outing_options,
             )
 
@@ -353,7 +486,7 @@ with tab_plan:
     st.subheader("🧭 Plan an adventure")
 
     st.caption(
-        "Choose a starting point and we will suggest nearby places across "
+        "Choose a starting point and build a route from nearby places across "
         "different types of activity."
     )
 
@@ -429,6 +562,7 @@ with tab_plan:
                         "Something to do",
                     ]
 
+                    route_places = []
                     stop_number = 1
 
                     for group_name in ordered_groups:
@@ -436,6 +570,8 @@ with tab_plan:
                             continue
 
                         place = chosen[group_name]
+                        route_places.append(place)
+
                         emojis = " ".join(
                             f"`{category}`"
                             for category in place["categories"]
@@ -449,35 +585,116 @@ with tab_plan:
                             f"{place['distance_km']} km away"
                         )
 
+                        stop_number += 1
+
+                    st.subheader("🗺️ Route preview")
+                    show_route_map(route_places)
+
+                    if len(route_places) > 1:
+                        origin = route_places[0]
+                        destination = route_places[-1]
+                        waypoints = route_places[1:-1]
+
                         google_url = (
                             "https://www.google.com/maps/dir/?api=1"
-                            f"&destination={place['latitude']},{place['longitude']}"
+                            f"&origin={origin['latitude']},{origin['longitude']}"
+                            f"&destination={destination['latitude']},{destination['longitude']}"
+                            "&travelmode=walking"
                         )
 
-                        apple_url = (
-                            "https://maps.apple.com/"
-                            f"?daddr={place['latitude']},{place['longitude']}"
-                            f"&q={place['name']}"
-                        )
+                        if waypoints:
+                            waypoint_text = "|".join(
+                                f"{place['latitude']},{place['longitude']}"
+                                for place in waypoints
+                            )
+                            google_url += f"&waypoints={waypoint_text}"
 
                         st.markdown(
-                            f"[Google Maps directions]({google_url}) • "
-                            f"[Apple Maps directions]({apple_url})"
+                            f"[🗺️ Open full route in Google Maps]({google_url})"
                         )
 
-                        stop_number += 1
+                    if st.button("Save this adventure as an outing"):
+                        stop_names = " → ".join(
+                            place["name"] for place in route_places
+                        )
+
+                        try:
+                            create_outing(
+                                title=f"Adventure idea: {stop_names}",
+                                outing_date=date.today(),
+                                notes=(
+                                    f"Planned adventure from {current_postcode}. "
+                                    f"Stops: {stop_names}."
+                                ),
+                            )
+
+                            st.cache_data.clear()
+                            st.success("Adventure saved to Memories.")
+                            st.rerun()
+                        except Exception as error:
+                            st.error(f"Could not save adventure: {error}")
 
 with tab_memories:
     st.subheader("📸 Memories")
 
-    outings = get_outings()
+    with st.form("create_outing_form_memories", border=True):
+        st.markdown("**Create a new outing**")
+
+        new_outing_title = st.text_input(
+            "Outing title",
+            placeholder="e.g. Saturday in Soho",
+            key="memories_outing_title",
+        )
+
+        new_outing_date = st.date_input(
+            "Outing date",
+            value=date.today(),
+            key="memories_outing_date",
+        )
+
+        new_outing_notes = st.text_area(
+            "Outing notes",
+            placeholder="Optional: what was the plan?",
+            key="memories_outing_notes",
+        )
+
+        create_outing_clicked = st.form_submit_button("Create outing")
+
+        if create_outing_clicked:
+            if not new_outing_title:
+                st.error("Please add an outing title.")
+            else:
+                try:
+                    create_outing(
+                        title=new_outing_title,
+                        outing_date=new_outing_date,
+                        notes=new_outing_notes,
+                    )
+
+                    st.cache_data.clear()
+                    st.success("Outing created.")
+                    st.rerun()
+                except Exception as error:
+                    st.error(f"Could not create outing: {error}")
+
+    st.divider()
 
     if not outings:
         st.info(
-            "No outings yet. When you add a visit, choose an existing outing "
-            "or create one to start building your timeline."
+            "No outings yet. Create one above, then link visits to it from "
+            "the Add Visit tab."
         )
     else:
         for outing in outings:
-            visits = get_visits_for_outing(outing["id"])
-            show_outing_card(outing, visits)
+            outing_visits = get_visits_for_outing(outing["id"])
+            show_outing_card(outing, outing_visits)
+
+if st.session_state.get("selected_place_id"):
+    selected_place = get_place(st.session_state["selected_place_id"])
+    selected_visits = get_visits_for_place(selected_place["id"])
+
+    place_details_dialog(selected_place, selected_visits)
+
+    if st.button("Close place details"):
+        del st.session_state["selected_place_id"]
+        st.rerun()
