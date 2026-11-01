@@ -6,18 +6,39 @@ from supabase import create_client
 
 CATEGORIES = [
     "Breakfast",
+    "Brunch",
     "Lunch",
     "Dinner",
+    "Bakery",
     "Sweet treat",
     "Bar",
     "Pub",
+    "Wine Bar",
     "Coffee shop",
     "Park",
     "Market",
     "Experience",
 ]
 
+CATEGORY_EMOJIS = {
+    "Breakfast": "🥞",
+    "Brunch": "🍳",
+    "Lunch": "🥗",
+    "Dinner": "🥘",
+    "Bakery": "🧁",
+    "Sweet treat": "🍩",
+    "Bar": "🍸",
+    "Pub": "🍻",
+    "Wine Bar": "🍷",
+    "Coffee shop": "☕️",
+    "Park": "🌳",
+    "Market": "🍲",
+    "Experience": "🪂",
+}
+
 COSTS = ["£", "££", "£££", "££££", "£££££"]
+
+COST_EMOJI = "💷"
 
 
 @st.cache_resource
@@ -65,29 +86,49 @@ def get_visits_for_place(place_id):
 
 
 def add_place(name, categories, postcode, latitude, longitude, cost, notes):
-    get_supabase().table("places").insert(
-        {
-            "name": name,
-            "categories": categories,
-            "postcode": postcode.upper().replace(" ", ""),
-            "latitude": latitude,
-            "longitude": longitude,
-            "cost": cost,
-            "notes": notes,
-        }
-    ).execute()
+    response = (
+        get_supabase()
+        .table("places")
+        .insert(
+            {
+                "name": name,
+                "categories": categories,
+                "postcode": postcode.upper().replace(" ", ""),
+                "latitude": latitude,
+                "longitude": longitude,
+                "cost": cost,
+                "notes": notes,
+            }
+        )
+        .execute()
+    )
+
+    if hasattr(response, "error") and response.error:
+        raise Exception(response.error.message)
+
+    return response
 
 
 def add_visit(place_id, visit_date, rating, diary, photo_urls):
-    get_supabase().table("visits").insert(
-        {
-            "place_id": place_id,
-            "visit_date": str(visit_date),
-            "rating": rating,
-            "diary": diary,
-            "photos": photo_urls,
-        }
-    ).execute()
+    response = (
+        get_supabase()
+        .table("visits")
+        .insert(
+            {
+                "place_id": place_id,
+                "visit_date": str(visit_date),
+                "rating": rating,
+                "diary": diary,
+                "photos": photo_urls,
+            }
+        )
+        .execute()
+    )
+
+    if hasattr(response, "error") and response.error:
+        raise Exception(response.error.message)
+
+    return response
 
 
 def delete_place(place_id):
