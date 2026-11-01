@@ -1,3 +1,4 @@
+import logging
 from datetime import date
 from urllib.parse import urlencode
 
@@ -8,6 +9,7 @@ from src.db import (
     get_outings, get_places, upload_photos,
 )
 from src.geo import find_nearby_places, geocode_postcode
+from src.place_editor import place_editor_panel
 from src.ui import (
     category_multiselect, cost_select, get_coordinates, get_place_emojis,
     show_outing_card, show_place_card, show_place_map, show_place_tile,
@@ -15,6 +17,7 @@ from src.ui import (
 )
 
 st.set_page_config(page_title="Matt & Preeti's London Adventures", page_icon="🗺️", layout="wide")
+logger = logging.getLogger(__name__)
 
 
 def finish_write(message):
@@ -37,8 +40,8 @@ def outing_form(prefix):
             try:
                 create_outing(title.strip(), outing_date, notes)
             except Exception:
+                logger.exception("Outing creation failed")
                 st.error("Could not create the outing. Check the app logs for details.")
-                st.exception(Exception("Outing creation failed; inspect server logs if the problem persists."))
             else:
                 finish_write("Outing created.")
 
@@ -105,9 +108,9 @@ with home:
                 if nearby:
                     next_place = nearby[0]
             except Exception:
+                logger.exception("Home postcode lookup failed")
                 st.caption("Nearby suggestions are temporarily unavailable.")
-        show_place_card(next_place, visits_by_place.get(next_place["id"], []),
-                        show_delete=False, key_prefix="home_")
+        show_place_card(next_place, visits_by_place.get(next_place["id"], []), show_delete=False, key_prefix="home_")
     else:
         st.info("Add somewhere new to start your next adventure.")
     st.divider()
@@ -119,6 +122,7 @@ with home:
 
 with add:
     st.subheader("Add a place you want to try")
+    st.caption("You can add a website and opening hours afterwards using Edit a place in All Places.")
     with st.form("add_place_form"):
         name = st.text_input("Place name")
         categories = category_multiselect()
@@ -136,8 +140,9 @@ with add:
                     st.error("Could not find that postcode. Check it and try again.")
                 else:
                     add_place(name.strip(), categories, postcode.strip(), coords[0], coords[1], cost, notes)
-            except Exception as error:
-                st.error(f"Could not save the place: {type(error).__name__}. Check the app logs.")
+            except Exception:
+                logger.exception("Place creation failed")
+                st.error("Could not save the place. Check the app logs.")
             else:
                 if coords is not None:
                     finish_write(f"Saved {name.strip()}.")
@@ -147,8 +152,7 @@ with map_tab:
     filters = st.columns(2)
     cats = filters[0].multiselect("What are you looking for?",
         sorted({c for p in places for c in (p.get("categories") or [])}), key="map_categories")
-    status = filters[1].radio("Visit status", ["All places", "Not visited yet", "Visited"],
-                              horizontal=True, key="map_status")
+    status = filters[1].radio("Visit status", ["All places", "Not visited yet", "Visited"], horizontal=True, key="map_status")
     selected_places = [p for p in places if not cats or set(cats) & set(p.get("categories") or [])]
     if status == "Visited":
         selected_places = [p for p in selected_places if p["id"] in visited_ids]
@@ -161,13 +165,13 @@ with map_tab:
         try:
             nearby = find_nearby_places(selected_places, origin.strip(), radius)
         except Exception:
+            logger.exception("Map postcode lookup failed")
             nearby = []
             st.error("Could not look up this postcode. Please try again.")
         if nearby:
             lookup = {p["id"]: p for p in nearby}
             selected_id = st.selectbox("Choose a place", list(lookup),
-                format_func=lambda pid: f"{lookup[pid]['name']} — {lookup[pid]['distance_km']} km",
-                key="map_selected_place")
+                format_func=lambda pid: f"{lookup[pid]['name']} — {lookup[pid]['distance_km']} km", key="map_selected_place")
             selected = lookup[selected_id]
             show_place_map(nearby, visited_ids, centre=get_coordinates(selected), zoom=14)
             show_place_card(selected, visits_by_place.get(selected_id, []), key_prefix="map_")
@@ -178,6 +182,7 @@ with map_tab:
 
 with collection:
     st.subheader("Your London collection")
+    place_editor_panel(places)
     filter_cols = st.columns([2, 2, 1])
     search = filter_cols[0].text_input("Search places", placeholder="Name or postcode", key="grid_search")
     categories = filter_cols[1].multiselect("Categories",
@@ -216,8 +221,7 @@ with diary_tab:
             visit_date = st.date_input("Visit date", value=date.today(), key="visit_date")
             rating = st.slider("Rating", 1, 5, 5, key="visit_rating")
             entry = st.text_area("Diary entry", key="visit_diary")
-            photos = st.file_uploader("Upload photos", type=["jpg", "jpeg", "png", "webp"],
-                                      accept_multiple_files=True, key="visit_photos")
+            photos = st.file_uploader("Upload photos", type=["jpg", "jpeg", "png", "webp"], accept_multiple_files=True, key="visit_photos")
             outing_id = st.selectbox("Was this part of an outing?", [None] + list(outing_lookup),
                 format_func=lambda oid: "No outing" if oid is None else f"{outing_lookup[oid]['title']} — {outing_lookup[oid]['outing_date']}", key="visit_outing")
             save = st.form_submit_button("Save visit")
@@ -225,8 +229,9 @@ with diary_tab:
             try:
                 photo_urls = upload_photos(photos, places_by_id[chosen_id]["name"]) if photos else []
                 add_visit(chosen_id, visit_date, rating, entry, photo_urls, outing_id=outing_id)
-            except Exception as error:
-                st.error(f"Could not save this visit: {type(error).__name__}. Check the app logs.")
+            except Exception:
+                logger.exception("Visit creation failed")
+                st.error("Could not save this visit. Check the app logs.")
             else:
                 finish_write("Visit saved.")
 
@@ -240,6 +245,7 @@ with planner:
         try:
             nearby = find_nearby_places(places, origin.strip(), radius)
         except Exception:
+            logger.exception("Planner postcode lookup failed")
             nearby = []
             st.error("Could not look up this postcode. Please try again.")
         used = set()
@@ -247,8 +253,7 @@ with planner:
             candidates = {p["id"]: p for p in nearby if p["id"] not in used and set(group_categories) & set(p.get("categories") or [])}
             if candidates:
                 pid = st.selectbox(group, [None] + list(candidates),
-                    format_func=lambda pid, candidates=candidates: "Skip this stop" if pid is None else f"{candidates[pid]['name']} — {candidates[pid]['distance_km']} km",
-                    key=f"planner_{group}")
+                    format_func=lambda pid, candidates=candidates: "Skip this stop" if pid is None else f"{candidates[pid]['name']} — {candidates[pid]['distance_km']} km", key=f"planner_{group}")
                 if pid:
                     route.append(candidates[pid])
                     used.add(pid)
@@ -269,8 +274,9 @@ with planner:
             names = " → ".join(p["name"] for p in route)
             try:
                 create_outing(f"Adventure idea: {names}", date.today(), f"Planned from {origin}. Stops: {names}. No visits logged yet.")
-            except Exception as error:
-                st.error(f"Could not save the plan: {type(error).__name__}.")
+            except Exception:
+                logger.exception("Adventure creation failed")
+                st.error("Could not save the plan. Check the app logs.")
             else:
                 finish_write("Plan saved as an outing. Link visits to it after your adventure.")
 
