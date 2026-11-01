@@ -1,6 +1,6 @@
 import math
 from html import escape
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlsplit
 
 import folium
 import streamlit as st
@@ -8,6 +8,7 @@ import streamlit.components.v1 as components
 
 from src.db import CATEGORIES, CATEGORY_EMOJIS, COSTS, COST_EMOJI, delete_place
 from src.place_editor import show_venue_information
+from src.cover_images import cover_image_dialog
 
 
 def category_multiselect(default=None):
@@ -129,7 +130,7 @@ def show_route_map(places):
 
 def delete_controls(place, prefix):
     with st.expander("⚠️ Delete this place"):
-        st.warning("Permanently deletes this place and all linked visit diary entries. Uploaded photo files remain in Storage. This cannot be undone.")
+        st.warning("Permanently deletes this place and all linked visit diary entries. Uploaded image files remain in Storage. This cannot be undone.")
         confirmed = st.checkbox(f"Yes, permanently delete {place['name']}", key=f"{prefix}_confirm")
         if st.button("Delete place permanently", key=f"{prefix}_delete", disabled=not confirmed, type="primary"):
             try:
@@ -144,7 +145,7 @@ def delete_controls(place, prefix):
 
 @st.dialog("Place details", width="large")
 def place_details_dialog(place, visits):
-    cover = get_cover_photo(visits)
+    cover = place.get("cover_image_url") or get_cover_photo(visits)
     if cover:
         st.image(cover, use_container_width=True)
     st.subheader(f"{place['name']} {get_place_emojis(place)}")
@@ -158,6 +159,8 @@ def place_details_dialog(place, visits):
     if get_coordinates(place) is not None:
         with st.expander("🗺️ Location"):
             show_place_map([place], {place["id"]} if visits else set(), centre=get_coordinates(place), zoom=15)
+    if place.get("cover_image_source"):
+        st.caption("Tile image source: " + str(place["cover_image_source"]))
     st.divider()
     st.subheader("Visit history")
     if not visits:
@@ -172,19 +175,52 @@ def place_details_dialog(place, visits):
     delete_controls(place, f"dialog_{place['id']}")
 
 
+def tile_html(place, visits):
+    image = place.get("cover_image_url") or ""
+    if image:
+        try:
+            parsed = urlsplit(image)
+            if parsed.scheme not in ("https", "http") or not parsed.hostname:
+                image = ""
+        except ValueError:
+            image = ""
+    image_html = (
+        f'<img src="{escape(image, quote=True)}" alt="" loading="lazy" '
+        'style="position:absolute;inset:0;width:100%;height:100%;object-fit:contain;" '
+        'onerror="this.style.display=String.fromCharCode(110,111,110,101)">'
+    ) if image else ""
+    name = escape(str(place.get("name", "")))
+    postcode = escape(str(place.get("postcode") or ""))
+    badge = "✅ Visited" if visits else "📍 Yet to visit"
+    return (
+        '<div style="position:relative;height:230px;border-radius:12px;overflow:hidden;'
+        'background:linear-gradient(135deg,#243b55,#573b61);font-family:Arial,sans-serif;color:white;">'
+        + image_html +
+        '<div style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,.02),rgba(0,0,0,.08) 30%,rgba(0,0,0,.90));"></div>'
+        '<div style="position:absolute;top:12px;right:12px;background:rgba(0,0,0,.65);'
+        f'border-radius:20px;padding:6px 10px;font-size:12px;">{badge}</div>'
+        '<div style="position:absolute;bottom:16px;left:16px;right:16px;">'
+        f'<div style="font-size:22px;font-weight:700;line-height:1.2;overflow-wrap:anywhere;">{name}</div>'
+        f'<div style="font-size:19px;margin-top:5px;">{get_place_emojis(place)}</div>'
+        f'<div style="font-size:13px;margin-top:7px;">{get_cost_emojis(place)} • {postcode}</div>'
+        '</div></div>'
+    )
+
+
 def show_place_tile(place, visits, key_prefix="grid_"):
     with st.container(border=True):
-        st.subheader(f"{place['name']} {get_place_emojis(place)}")
-        st.caption(f"{get_cost_emojis(place)} • {place.get('postcode', '')}")
-        st.caption("✅ Visited" if visits else "📍 Yet to visit")
+        components.html(tile_html(place, visits), height=240, scrolling=False)
         if st.button("Explore place ↗", key=f"{key_prefix}{place['id']}_explore", use_container_width=True):
             place_details_dialog(place, visits)
+        if st.button("🖼️ Change logo" if place.get("cover_image_url") else "🖼️ Choose logo",
+                     key=f"{key_prefix}{place['id']}_background", use_container_width=True):
+            cover_image_dialog(place)
 
 
 def show_place_card(place, visits, show_delete=True, key_prefix=""):
     prefix = f"{key_prefix}{place['id']}"
     with st.container(border=True):
-        cover = get_cover_photo(visits)
+        cover = place.get("cover_image_url") or get_cover_photo(visits)
         if cover:
             st.image(cover, use_container_width=True)
         st.subheader(f"{place['name']} {get_place_emojis(place)} {'✅' if visits else ''}")
