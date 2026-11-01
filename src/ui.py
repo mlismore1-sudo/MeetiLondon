@@ -50,6 +50,14 @@ def make_directions_links(place):
 def show_place_map(places, visited_place_ids=None, centre=None, zoom=11):
     visited_place_ids = visited_place_ids or set()
 
+    # Ignore any places that do not have map coordinates
+    places = [
+        place
+        for place in places
+        if place.get("latitude") is not None
+        and place.get("longitude") is not None
+    ]
+
     if centre:
         map_centre = [centre[0], centre[1]]
     elif places:
