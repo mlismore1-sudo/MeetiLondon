@@ -225,7 +225,12 @@ def show_route_map(places):
     st_folium(fmap, use_container_width=True, height=450)
 
 
-def show_place_card(place, visits, show_delete=True):
+def show_place_card(
+    place,
+    visits,
+    show_delete=True,
+    key_prefix="",
+):
     with st.container(border=True):
         cover_photo = get_cover_photo(visits)
 
@@ -273,7 +278,7 @@ def show_place_card(place, visits, show_delete=True):
         with button_columns[0]:
             if st.button(
                 "View details",
-                key=f"view_details_{place['id']}",
+                key=f"{key_prefix}view_details_{place['id']}",
                 use_container_width=True,
             ):
                 st.session_state["selected_place_id"] = place["id"]
@@ -281,7 +286,7 @@ def show_place_card(place, visits, show_delete=True):
         with button_columns[1]:
             if st.button(
                 "View on map",
-                key=f"view_on_map_{place['id']}",
+                key=f"{key_prefix}view_on_map_{place['id']}",
                 use_container_width=True,
             ):
                 st.session_state["selected_map_place_id"] = place["id"]
@@ -295,12 +300,12 @@ def show_place_card(place, visits, show_delete=True):
 
                 confirm_delete = st.checkbox(
                     f"Yes, permanently delete {place['name']}",
-                    key=f"confirm_delete_{place['id']}",
+                    key=f"{key_prefix}confirm_delete_{place['id']}",
                 )
 
                 if st.button(
                     "Delete place",
-                    key=f"delete_place_{place['id']}",
+                    key=f"{key_prefix}delete_place_{place['id']}",
                     disabled=not confirm_delete,
                     type="primary",
                 ):
