@@ -28,6 +28,7 @@ def get_supabase():
     )
 
 
+@st.cache_data(ttl=300)
 def get_places():
     response = (
         get_supabase()
@@ -87,6 +88,10 @@ def add_visit(place_id, visit_date, rating, diary, photo_urls):
             "photos": photo_urls,
         }
     ).execute()
+
+
+def delete_place(place_id):
+    get_supabase().table("places").delete().eq("id", place_id).execute()
 
 
 def upload_photos(files, place_name):
