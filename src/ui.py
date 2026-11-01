@@ -186,7 +186,7 @@ def tile_html(place, visits):
             image = ""
     image_html = (
         f'<img src="{escape(image, quote=True)}" alt="" loading="lazy" '
-        'style="position:absolute;inset:0;width:100%;height:100%;object-fit:contain;" '
+        'style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;" '
         'onerror="this.style.display=String.fromCharCode(110,111,110,101)">'
     ) if image else ""
     name = escape(str(place.get("name", "")))
@@ -212,7 +212,7 @@ def show_place_tile(place, visits, key_prefix="grid_"):
         components.html(tile_html(place, visits), height=240, scrolling=False)
         if st.button("Explore place ↗", key=f"{key_prefix}{place['id']}_explore", use_container_width=True):
             place_details_dialog(place, visits)
-        if st.button("🖼️ Change logo" if place.get("cover_image_url") else "🖼️ Choose logo",
+        if st.button("🖼️ Change background" if place.get("cover_image_url") else "🖼️ Choose background",
                      key=f"{key_prefix}{place['id']}_background", use_container_width=True):
             cover_image_dialog(place)
 
