@@ -19,8 +19,8 @@ from src.ui import (
 )
 
 st.set_page_config(
-    page_title="London Date Nights",
-    page_icon="💞",
+    page_title="Meeti's London Adventures",
+    page_icon="🗺️",
     layout="wide",
 )
 
@@ -28,7 +28,7 @@ if "authenticated" not in st.session_state:
     st.session_state.authenticated = False
 
 if not st.session_state.authenticated:
-    st.title("💞 London Date Nights")
+    st.title("🗺️ Meeti's London Adventures")
     password = st.text_input("Enter shared password", type="password")
 
     if st.button("Enter"):
@@ -40,7 +40,7 @@ if not st.session_state.authenticated:
 
     st.stop()
 
-st.title("💞 London Date Nights")
+st.title("🗺️ Meeti's London Adventures")
 st.caption(
     "Save places to try, find somewhere nearby, and keep a photo diary of your visits."
 )
