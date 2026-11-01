@@ -144,6 +144,7 @@ with tab_home:
             next_place,
             get_visits_for_place(next_place["id"]),
             show_delete=False,
+            key_prefix="home_",
         )
     else:
         st.info("You have visited every saved place. Time to add more!")
@@ -311,6 +312,7 @@ with tab_map:
             show_place_card(
                 selected,
                 get_visits_for_place(selected["id"]),
+                key_prefix="map_",
             )
         else:
             st.info("No matching places within that radius.")
@@ -357,6 +359,7 @@ with tab_list:
             show_place_card(
                 place,
                 get_visits_for_place(place["id"]),
+                key_prefix="list_",
             )
 
 with tab_diary:
@@ -417,10 +420,11 @@ with tab_diary:
 
         st.divider()
 
-        outings = get_outings()
+        current_outings = get_outings()
+
         outing_options = ["No outing"] + [
             f"{outing['title']} — {outing['outing_date']}"
-            for outing in outings
+            for outing in current_outings
         ]
 
         with st.form("visit_form", clear_on_submit=True):
@@ -464,7 +468,7 @@ with tab_diary:
 
                 if selected_outing != "No outing":
                     selected_index = outing_options.index(selected_outing) - 1
-                    outing_id = outings[selected_index]["id"]
+                    outing_id = current_outings[selected_index]["id"]
 
                 try:
                     add_visit(
@@ -679,13 +683,15 @@ with tab_memories:
 
     st.divider()
 
-    if not outings:
+    current_outings = get_outings()
+
+    if not current_outings:
         st.info(
             "No outings yet. Create one above, then link visits to it from "
             "the Add Visit tab."
         )
     else:
-        for outing in outings:
+        for outing in current_outings:
             outing_visits = get_visits_for_outing(outing["id"])
             show_outing_card(outing, outing_visits)
 
