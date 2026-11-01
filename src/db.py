@@ -36,6 +36,30 @@ CATEGORY_EMOJIS = {
     "Experience": "🪂",
 }
 
+CATEGORY_GROUPS = {
+    "Meal": [
+        "Breakfast",
+        "Brunch",
+        "Lunch",
+        "Dinner",
+        "Market",
+    ],
+    "Snack": [
+        "Bakery",
+        "Sweet treat",
+        "Coffee shop",
+    ],
+    "Grab a drink": [
+        "Bar",
+        "Pub",
+        "Wine Bar",
+    ],
+    "Something to do": [
+        "Park",
+        "Experience",
+    ],
+}
+
 COSTS = ["£", "££", "£££", "££££", "£££££"]
 
 COST_EMOJI = "💷"
@@ -85,6 +109,30 @@ def get_visits_for_place(place_id):
     return response.data
 
 
+@st.cache_data(ttl=300)
+def get_outings():
+    response = (
+        get_supabase()
+        .table("outings")
+        .select("*")
+        .order("outing_date", desc=True)
+        .execute()
+    )
+    return response.data
+
+
+def get_visits_for_outing(outing_id):
+    response = (
+        get_supabase()
+        .table("visits")
+        .select("*, places(name, categories, cost, postcode)")
+        .eq("outing_id", outing_id)
+        .order("created_at", desc=False)
+        .execute()
+    )
+    return response.data
+
+
 def add_place(name, categories, postcode, latitude, longitude, cost, notes):
     response = (
         get_supabase()
@@ -109,17 +157,40 @@ def add_place(name, categories, postcode, latitude, longitude, cost, notes):
     return response
 
 
-def add_visit(place_id, visit_date, rating, diary, photo_urls):
+def add_visit(place_id, visit_date, rating, diary, photo_urls, outing_id=None):
+    payload = {
+        "place_id": place_id,
+        "visit_date": str(visit_date),
+        "rating": rating,
+        "diary": diary,
+        "photos": photo_urls,
+    }
+
+    if outing_id:
+        payload["outing_id"] = outing_id
+
     response = (
         get_supabase()
         .table("visits")
+        .insert(payload)
+        .execute()
+    )
+
+    if hasattr(response, "error") and response.error:
+        raise Exception(response.error.message)
+
+    return response
+
+
+def create_outing(title, outing_date, notes):
+    response = (
+        get_supabase()
+        .table("outings")
         .insert(
             {
-                "place_id": place_id,
-                "visit_date": str(visit_date),
-                "rating": rating,
-                "diary": diary,
-                "photos": photo_urls,
+                "title": title,
+                "outing_date": str(outing_date),
+                "notes": notes,
             }
         )
         .execute()
@@ -128,7 +199,7 @@ def add_visit(place_id, visit_date, rating, diary, photo_urls):
     if hasattr(response, "error") and response.error:
         raise Exception(response.error.message)
 
-    return response
+    return response.data[0]["id"]
 
 
 def delete_place(place_id):
